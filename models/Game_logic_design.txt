@@ -1,0 +1,50 @@
+                            Game Logic and function design
+
+Init game settings:
+Player number per game: 3-6
+Init armie per player: (10-player num)*round(country num*0.12)
+Produce a rand oder for the players to action
+Place armies: if there are empty countries, user must put army in that place, and when all of the countries are occpuied, the player could place armies into there own countries.
+
+
+Moving
+init settings: 1. one click moving one army;
+                  2. After moving the start country must exist at least one army;
+procedure:
+click-> get the start country ID and the target country ID(get form the click action) -> check start country remaining armies number->if statisfy init setting 2->check the adjenct ->if  YES->check target country belongs
+->if blong to self-> move(update database)
+->others-> ask for fighting
+
+Fighting
+init settings: 1. attacker roll max 3 (the attacker armies num mines 1) dices; 
+                  2. defender roll max 2 (same num of def armies) dices;
+                  3. every time pick the maxium dice making compar, att>def, def lose one army, else att lose  a army;
+                  4. attacker could choose continue attacking or stop after one fighting;
+                  5. If the attacker victory, he can occpuied the the target country, attacker could choose moving how many 
+armies to the new country, min 1, max the last attack num.
+                  6. After the attacker victory, judge the def statue, completely lose or not. If the player has been defeated, the attacker could get all of the cards of the loser have.
+procedure:
+input: the datasets that contains the troops number that searched from the databaes with the  country ID, target country ID.
+DEAL: according to armies number, attacker must destory all of the defender armies, then they can occpuied the country. arrange the rolling dices according to init setting. 
+output: fighting results: armies lose, occuptied/moving armies.
+
+Trade cards
+init settings: 1. each player has the opportunity to trade cards at the beginning of each turn, every time the player click the system would use this function one time to judge whether trade cards is available.
+                  2. the player must trade in the cards if they have more than 5 cards;
+                  3. There are total 42 cards, each has a simple(one of three, infantry, cavalryman, artilleryman), and a country sign, and there are two wild-cards, which have no country simple, but all of three simples
+                  4. three cards with the same simple could used to trade in 3 armies
+                   5.the player would could trade in more troops with the trade cards times grow, first time for 3, second  for 5, thrid for 7бн and so on.
+For the deatils of this function: input: the card information that hold by this player
+Output: return a signal to the model to update the database.
+
+Draw cards
+init settings: each player could draw a card after he win a fight and occupied a country.
+input: the dataset that contants all of the free cards that would be available to draw.
+And then Rolling a random number to get a card
+output: return a signal to the model to update the database.
+
+After turn judegement
+a.Army arragement
+1. new armies num= 3/num belongs to you(floor, min 3)+contienent rewards 
+b. victory judgement
+If a player has lost all of his lands.

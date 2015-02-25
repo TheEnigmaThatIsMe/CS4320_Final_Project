@@ -1,0 +1,566 @@
+<?php
+	session_start();
+		
+	//redirect HTTP to HTTPS
+	/*if(!isset($_SERVER['HTTPS']) || $_SERVER['HTTPS'] == ""){
+		$redirect = "https://".$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'];
+		header("Location: $redirect");
+	}*/
+		
+	//if the user hasn't logged in, sent the user back to index page
+	
+	if(!$_SESSION['username']){		
+		//header("Location: https://".$_SERVER['HTTP_HOST']."/~cs4320f14grp3/website/index.php");
+	}
+?>
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>RiSK</title>
+		<style>
+			body{
+				background-color: brown;
+			}
+			
+			#map_wrapper {
+				position: relative;
+				width: 1200px;
+			}
+			
+			/*CSS highlight*/
+			.highlightit {
+				text-align: center;
+				vertical-align: middle;
+			}
+			.highlightit img{
+				filter:progid:DXImageTransform.Microsoft.Alpha(opacity=50);
+				-moz-opacity: 0.5;
+				opacity: 0.5;
+			}
+			.highlightit:hover img{
+				filter:progid:DXImageTransform.Microsoft.Alpha(opacity=100);
+				-moz-opacity: 1;
+				opacity: 1;
+			}
+			
+			.dragTiles{
+				position: absolute;
+			}
+			
+			/*.scale{
+				transform: scale(0.38,0.38);
+				-ms-transform: scale(0.38,0.38); /* IE 9 */
+				-webkit-transform: scale(0.38,0.38); /* Chrome, Safari, Opera */
+			}
+			*/
+
+			
+			
+			#number{
+				position: absolute;
+				left: 38px;
+				top: 27px;
+			}
+			
+			/* CSS Clear Hack: apply this to the containing element. http://css-tricks.com/snippets/css/clear-fix/ */
+			.group:before,
+			.group:after {
+			content:"";
+			display:table;
+			}
+			.group:after {
+			clear:both;
+			}
+			.group {
+			zoom:1; /* For IE 6/7 (trigger hasLayout) */
+			}
+			
+			.circle, .armyNum {
+				position: absolute;
+			}
+			
+			#menuWrapper {
+				width: 1200px;
+			}
+			
+			.menu {
+				width: 33%;
+				height: 100px;
+				float: left;
+				border: 1px solid black;
+			}
+			
+			#logo {
+				width: 290px;
+			}
+			
+			#endTurn {
+				margin: 0 auto;
+			}
+		</style>
+		<link href="jquery-ui-1.11.2/jquery-ui.css" rel="stylesheet">
+		<script src="jquery-ui-1.11.2/external/jquery/jquery.js"></script>
+		<script src="jquery-ui-1.11.2/jquery-ui.js"></script>
+		<script type="text/javascript"> var username = "<?=$_SESSION['username'] ?>"</script>
+		<script>
+			var info = {};
+			var whosTurn;
+			var whosColor;
+			var gamePhase;
+			var id;
+			
+			$(function() {
+				initGameState();
+				initMap();
+				
+				var myVar = setInterval(function(){
+						initGameState();
+						initMap();
+						//console.log(username);
+						//console.log(whosTurn);
+						//console.log(username.localeCompare(whosTurn));
+						$( "#fightStatus" ).html("Waiting for other players to finish their turn.");
+						if(whosTurn != null && username.localeCompare(whosTurn) == 0) {
+							clearInterval(myVar);
+							$(".dragTiles").click(function() {
+											selectTerritory(this);
+									} );
+							$( "#fightStatus" ).html("Select your territory to reinforce.");
+							}
+
+							
+					}, 5000
+				);
+				
+			});
+			
+			/* Resize the map after all the objects loaded*/
+			$(window).load( function () { 
+			   var pics = document.getElementsByTagName("img");  
+			   for(i = 0; i < pics.length; i++)
+				 pics[i].width *= 0.38;
+			});
+			
+			/*	Will initialize the map when the site is loaded.  Will get the full state from the database and load the armies onto the map.
+				Uses ajax to go to JSON from functions.php file.
+				
+				JSON format currently is the following: 
+				0: Object
+					0: "1"
+					1: "Alaska"
+					2: "North America"
+					3: null
+					4: null
+					continent_name: "North America"
+					country_id: "1"
+					country_name: "Alaska
+					"num_of_troops: null
+					occupied_by: null
+			*/
+			function initMap() {
+				$.ajax({
+							url: "functions.php",
+							type: "POST",
+							data: { function_call : 'mapState' }
+						}).done(function(response) {
+							//console.log(response);
+							var json = jQuery.parseJSON( response );
+							//console.log(json);
+							$.each(json, function(key, value) {
+								//console.log(value);
+								value.country_name = value.country_name.replace(/ /g, '');
+								$( "img[alt="+value.country_name+"]" ).attr("country_id", value.country_id);
+								addArmyByAttr(value.country_name, value.num_of_troops, value.occupied_by, value.color);								
+							});
+							
+							info.fromTerritory = info.toTerritory = null;
+						}).fail(function() {
+							alert("fail on map");
+						});
+			}
+			
+			/* 	Will initialize the game state by getting the state from the database
+				Using ajax to get the following JSON:
+				
+				Object {0: "2", 1: "2", user_id: "2", stage_of_turn: "2"} 
+			
+			*/
+			function initGameState() {
+				$.ajax({
+							url: "functions.php",
+							type: "POST",
+							data: { function_call : 'gameState' }
+						}).done(function(response) {
+							//console.log(response);
+							var json = jQuery.parseJSON( response );
+							//console.log(json);
+							whosTurn = json.name;
+							gamePhase = setPhase(json.stage_of_turn);
+							id = json.user_id;
+							whosColor = json.color;
+							var str = "Player: " + whosTurn + " Phase: " + gamePhase;
+							//console.log(str);
+							if(whosTurn != null)
+								updateTurnStatus();
+						}).fail(function() {
+							alert("fail on gamestate");
+						});
+			}
+			
+			function setPhase(state) {
+				switch(state) {
+					case "1":
+						return "Reinforce";
+						break;
+					case "2":
+						return "Attack";
+						break;
+					case "3":
+						return "Fortify";
+				}
+			}
+			
+			/*	Will be used for adding armies from JSON data.  currently only used during the initialization phase.
+			
+			*/
+			function addArmyByAttr(name, size, owner, color) {
+				try {
+					//console.log("Adding "+name);
+					if(owner){
+					
+					/*var color;
+					
+					switch(owner) {
+						case "1":
+							color = "blue";
+							break;
+						case "2":
+							color = "red";
+							break;
+						case "3":
+							color = "green";
+							break;
+							
+					}*/
+					
+					
+					var army = size;
+					var img = "img[alt="+name+"]";
+					
+					var tag = $( "img[alt="+name+"]" );
+
+					
+					var radius = 15;
+					var xOff = $( tag ).position().left;
+					var yOff = $( tag ).position().top;
+					
+					var x = $( tag ).width()/2 + xOff - radius;
+					var y = $( tag ).height()/2 + yOff - radius;
+					
+					var test = $( tag ).parent().children();
+					//console.log( test );
+					//console.log(tag);
+					//if( $( tag ).parent().children().length > 1 )
+						//$( tag.parent().prop("tagName")+"> a" ).remove();
+						$("#"+name+"> a").remove();
+						$("#"+name+"> div" ).remove();
+					//console.log(tag.parent().prop("tagName"));
+					
+					$( tag ).after( 
+						"<a class=\"circle\" style=\"left: "+x+"px; top: "+y+"px;\"><svg width=\""+2*radius+"\" height=\""+2*radius+"\" ><circle cx=\""+radius+"\" cy=\""+radius+"\" r=\""+radius+"\" fill="+color+"></circle></svg></a><div class=\"armyNum\" style=\"left: "+(x+10)+"px; top: "+(y+7)+"px;\">"+army+"</div>"
+					);
+			}
+				} catch(err) {
+					console.log(err.message);
+				}
+			}
+			
+			/*	Used for when a user clicks on a territory to select it for an action like attacking.  Will check if territories have clicked and deselect if they have been.  Otherwise it will
+				add fire off server request after second territory has been clicked.  
+			*/
+			function selectTerritory(territory) {
+				//console.log(territory);
+				
+				if(gamePhase == "Reinforce"){
+					$.ajax({
+								url: "functions.php",
+								type: "POST",
+								data: { function_call : 'reinforce' ,
+										territory_id : $( territory ).attr("country_id"),
+										color : whosColor}
+							}).done(function(response) {
+								//console.log(response);
+								updateStatus(response);
+								initMap();
+							}).fail(function() {
+								alert("fail on selectTerritory Reinforce");
+							});
+				}
+				else{
+					if(info.fromTerritory == null) {
+						toggleHighlight(territory);
+						info.fromTerritory = territory;
+					} else if(info.fromTerritory == $( territory ).attr("country_id")) { 
+						toggleHighlight(territory);
+						info.fromTerritory = null;
+					} else {
+						info.toTerritory = $( territory ).attr("country_id");
+						if(gamePhase == "Attack"){
+							$.ajax({
+									url: "../test/index.php",
+									type: "POST",
+									data: { function_call : 'attacking' ,
+											fromTerritory : $(info.fromTerritory).attr("country_id"), 
+											toTerritory : info.toTerritory}
+								}).done(function(response) {
+									console.log(response);
+									//var json = jQuery.parseJSON( response );
+									updateStatus(response);
+									//console.log(json);
+									toggleHighlight(info.fromTerritory);
+									info.fromTerritory = info.toTerritory = null;
+									initMap();
+								}).fail(function() {
+									alert("fail on selectTerritory Attack");
+								});
+						} else if(gamePhase == "Fortify"){
+							$.ajax({
+									url: "../test/index.php",
+									type: "POST",
+									data: { function_call : 'moving' ,
+											fromTerritory : $(info.fromTerritory).attr("country_id"), 
+											toTerritory : info.toTerritory}
+								}).done(function(response) {
+									console.log(response);
+									//var json = jQuery.parseJSON( response );
+									updateStatus(response);
+									//console.log(json);
+									toggleHighlight(info.fromTerritory);
+									info.fromTerritory = info.toTerritory = null;
+									initMap();
+								}).fail(function() {
+									alert("fail on selectTerritory Move");
+								});						
+						}
+					}
+					console.log("from:"+$(info.fromTerritory).attr("country_id"));
+					console.log("to:"+info.toTerritory);
+					//console.log(info);
+				}
+			}
+			
+			function updateStatus(response){
+			
+				switch(gamePhase){
+					case "Attack":
+						if(response == 0)
+							$("#fightStatus").html("Unable to attack that territory.  Choose again or end phase.    ").append( "<button id=\"endPhase\" onclick=\"endPhase()\">End Phase</button>");
+						else if(response == 1)
+							$("#fightStatus").html("You win the territory!  Choose another territory to continue attacking or end phase.    ").append( "<button id=\"endPhase\" onclick=\"endPhase()\">End Phase</button>");
+						else if(response == 2)
+							$("#fightStatus").html("You win the fight, but the defender still has troops!  Choose another territory to continue attacking or end phase.    ").append( "<button id=\"endPhase\" onclick=\"endPhase()\">End Phase</button>");
+						else if(response == 3)
+							$("#fightStatus").html("You lost the fight!  Choose another territory to continue attacking or end phase.    ").append( "<button id=\"endPhase\" onclick=\"endPhase()\">End Phase</button>");
+						break;
+					case "Reinforce":
+						if(response == 0)
+							$("#fightStatus").html("Unable to reinforce that territory.  Choose again or end phase.    ").append( "<button id=\"endPhase\" onclick=\"endPhase()\">End Phase</button>");
+						else if(response == 1)
+							$("#fightStatus").html("Territory reinforced!  Choose another territory or end phase.    ").append( "<button id=\"endPhase\" onclick=\"endPhase()\">End Phase</button>");
+						break;
+				}
+			}
+						
+			/*toggle highlight*/
+			function toggleHighlight(territory) {
+					if (!$(territory).parent().hasClass("highlightit")){
+						$(territory).parent().addClass("highlightit");
+					}
+					else{
+						$(territory).parent().removeClass("highlightit");
+					}
+			}
+			
+			function updateTurnStatus() {
+				$( "#turn" ).html( "Turn: "+whosTurn );
+				$( "#color" ).html( "Color: "+whosColor ).css("color", whosColor);
+				$( "#phase" ).html( "Phase: "+gamePhase );
+				//$( "#username" ).html( username );
+			}
+			
+			function endPhase() {
+				$.ajax({
+					url: "functions.php",
+					type: "POST",
+					data: { function_call : 'endPhase',
+							phase : gamePhase,
+							id : id}
+				}).done(function(response) {
+					//console.log(response);
+					toggleHighlight(info.fromTerritory);
+					info.fromTerritory = info.toTerritory = null;
+					
+					if(gamePhase == "Fortify")
+						location.reload();
+					else{
+						$("#fightStatus").html("Select your territory or end phase.    ").append( "<button id=\"endPhase\" onclick=\"endPhase()\">End Phase</button>");
+						initGameState();
+					}
+				}).fail(function() {
+					alert("fail on endPhase");
+				});
+			}
+
+		</script>
+	</head>
+	<body>
+	<!--tried to wrap all images within a div, but the width property seems not working (can't scale all the images within this wrapper at the same time)-->
+	<div id="map_wrapper" class="group" >
+		<!--import the map border image-->
+		<img src="images/territories/map_border.png" alt="Border">
+		<!--import all the territories with fixed position on the map-->
+		<a id="Alaska" class="highlightit">
+			<img src="images/territories/NorthAmerica/Alaska.png" alt="Alaska" class="dragTiles ui-draggable ui-draggable-handle" style="left: 83.3645963668823px; top: 55.000002861023px;">
+		</a>
+		<a id="Alberta" class="highlightit">
+			<img src="images/territories/NorthAmerica/Alberta.png" alt="Alberta" class="dragTiles ui-draggable ui-draggable-handle" style="left: 175.37501001358px; top: 116px;">
+		</a>
+		<a id="CentralAmerica" class="highlightit">
+			<img src="images/territories/NorthAmerica/CentralAmerica.png" alt="CentralAmerica" class="dragTiles ui-draggable ui-draggable-handle" style="left: 186.375011444092px; top: 278.000015258789px;">
+		</a>
+		<a  id="EasternCanada" class="highlightit">
+			<img src="images/territories/NorthAmerica/EasternCanada.png" alt="EasternCanada" class="dragTiles ui-draggable ui-draggable-handle" style="left: 330.37504196167px; top: 115px;">
+		</a>
+		<a id="EasternUnitedStates" class="highlightit">
+			<img src="images/territories/NorthAmerica/EasternUnitedStates.png" alt="EasternUnitedStates" class="dragTiles ui-draggable ui-draggable-handle" style="left: 179.375004768372px; top: 191.000007629395px;">
+		</a>
+		<a id="Greenland" class="highlightit">
+			<img src="images/territories/NorthAmerica/Greenland.png" alt="Greenland" class="dragTiles ui-draggable ui-draggable-handle" style="left: 359.375015258789px; top: 2px;">
+		</a>
+		<a id="NorthwestTerritory" class="highlightit">
+			<img src="images/territories/NorthAmerica/NorthwestTerritory.png" alt="NorthwestTerritory" class="dragTiles ui-draggable ui-draggable-handle" style="left: 162.375px; top: 41px;">
+		</a>
+		<a id="Ontario" class="highlightit">
+			<img src="images/territories/NorthAmerica/Ontario.png" alt="Ontario" class="dragTiles ui-draggable ui-draggable-handle" style="left: 262.375011444092px; top: 120px;">
+		</a>
+		<a id="WesternUnitedStates" class="highlightit">
+			<img src="images/territories/NorthAmerica/WesternUnitedStates.png" alt="WesternUnitedStates" class="dragTiles ui-draggable ui-draggable-handle" style="left: 180.375020027161px; top: 191.000022888184px;">
+		</a>
+		<a id="Argentina" class="highlightit">
+			<img src="images/territories/SouthAmerica/Argentina.png" alt="Argentina" class="dragTiles ui-draggable ui-draggable-handle" style="left: 302.375020027161px; top: 510.000030517578px;">
+		</a>
+		<a id="Brazil" class="highlightit">
+			<img src="images/territories/SouthAmerica/Brazil.png" alt="Brazil" class="dragTiles ui-draggable ui-draggable-handle" style="left: 287.375px; top: 401.000015258789px;">
+		</a>
+		<a id="Peru" class="highlightit">
+			<img src="images/territories/SouthAmerica/Peru.png" alt="Peru" class="dragTiles ui-draggable ui-draggable-handle" style="left: 261.375px; top: 418.000015258789px;">
+		</a>
+		<a id="Venezuela" class="highlightit">
+			<img src="images/territories/SouthAmerica/Venezuela.png" alt="Venezuela" class="dragTiles ui-draggable ui-draggable-handle" style="left: 269.375px; top: 365.000061035156px;">
+		</a>
+		<a id="GreatBritain" class="highlightit">
+			<img src="images/territories/Europe/GreatBritain.png" alt="GreatBritain" class="dragTiles ui-draggable ui-draggable-handle" style="left: 448.375020027161px; top: 162px;">
+		</a>
+		<a id="Iceland" class="highlightit">
+			<img src="images/territories/Europe/Iceland.png" alt="Iceland" class="dragTiles ui-draggable ui-draggable-handle" style="left: 497.375020027161px; top: 111px;">
+		</a>
+		<a id="NorthernEurope" class="highlightit">
+			<img src="images/territories/Europe/NorthernEurope.png" alt="NorthernEurope" class="dragTiles ui-draggable ui-draggable-handle" style="left: 557.375020027161px; top: 178px;">
+		</a>
+		<a id="Russia" class="highlightit">
+			<img src="images/territories/Europe/Russia.png" alt="Russia" class="dragTiles ui-draggable ui-draggable-handle" style="left: 633.375020027161px; top: 78px;">
+		</a>
+		<a id="Scandinavia" class="highlightit">
+			<img src="images/territories/Europe/Scandinavia.png" alt="Scandinavia" class="dragTiles ui-draggable ui-draggable-handle" style="left: 568.375020027161px; top: 75px;">
+		</a>
+		<a id="SouthernEurope" class="highlightit">
+			<img src="images/territories/Europe/SouthernEurope.png" alt="SouthernEurope" class="dragTiles ui-draggable ui-draggable-handle" style="left: 567.375020027161px; top: 248px;">
+		</a>
+		<a id="WesternEurope" class="highlightit">
+			<img src="images/territories/Europe/WesternEurope.png" alt="WesternEurope" class="dragTiles ui-draggable ui-draggable-handle" style="left: 490.354176521301px; top: 248.97917175293px;">
+		</a>
+		<a id="EasternAustralia" class="highlightit">
+			<img src="images/territories/Australia/EasternAustralia.png" alt="EasternAustralia" class="dragTiles ui-draggable ui-draggable-handle" style="left: 1034.375px; top: 540.000030517578px;">
+		</a>
+		<a id="Indonesia" class="highlightit">
+			<img src="images/territories/Australia/Indonesia.png" alt="Indonesia" class="dragTiles ui-draggable ui-draggable-handle" style="left: 900.375px; top: 472px;">
+		</a>
+		<a id="NewGuinea" class="highlightit">
+			<img src="images/territories/Australia/NewGuinea.png" alt="NewGuinea" class="dragTiles ui-draggable ui-draggable-handle" style="left: 1010.375px; top: 458px;">
+		</a>
+		<a id="WesternAustralia" class="highlightit">
+			<img src="images/territories/Australia/WesternAustralia.png" alt="WesternAustralia" class="dragTiles ui-draggable ui-draggable-handle" style="left: 962.375px; top: 556.000030517578px;">
+		</a>
+		<a id="Afghanistan" class="highlightit">
+			<img src="images/territories/Asia/Afghanistan.png" alt="Afghanistan" class="dragTiles ui-draggable ui-draggable-handle" style="left: 733.375030517578px; top: 195.000007629395px;">
+		</a>
+		<a id="China" class="highlightit">
+			<img src="images/territories/Asia/China.png" alt="China" class="dragTiles ui-draggable ui-draggable-handle" style="left: 834.375030517578px; top: 218.000007629395px;">
+		</a>
+		<a id="India" class="highlightit">
+			<img src="images/territories/Asia/India.png" alt="India" class="dragTiles ui-draggable ui-draggable-handle" style="left: 795.375030517578px; top: 299.000007629395px;">
+		</a>
+		<a id="Irkutsk" class="highlightit">
+			<img src="images/territories/Asia/Irkutsk.png" alt="Irkutsk" class="dragTiles ui-draggable ui-draggable-handle" style="left: 886.375030517578px; top: 117.000002861023px;">
+		</a>
+		<a id="Japan" class="highlightit">
+			<img src="images/territories/Asia/Japan.png" alt="Japan" class="dragTiles ui-draggable ui-draggable-handle" style="left: 1026.37503051758px; top: 184.000010490417px;">
+		</a>
+		<a id="Kamchatka" class="highlightit">
+			<img src="images/territories/Asia/Kamchatka.png" alt="Kamchatka" class="dragTiles ui-draggable ui-draggable-handle" style="left: 961.375030517578px; top: 50.000002861023px;">
+		</a>
+		<a id="MiddleEast" class="highlightit">
+			<img src="images/territories/Asia/MiddleEast.png" alt="MiddleEast" class="dragTiles ui-draggable ui-draggable-handle" style="left: 646.375045776367px; top: 306.000015258789px;">
+		</a>
+		<a id="Mongolia" class="highlightit">
+			<img src="images/territories/Asia/Mongolia.png" alt="Mongolia" class="dragTiles ui-draggable ui-draggable-handle" style="left: 895.375030517578px; top: 181.000010490417px;">
+		</a>
+		<a id="Siberia" class="highlightit">
+			<img src="images/territories/Asia/Siberia.png" alt="Siberia" class="dragTiles ui-draggable ui-draggable-handle" style="left: 803.375030517578px; top: 16.0000009536743px;">
+		</a>
+		<a id="SoutheastAsia" class="highlightit">
+			<img src="images/territories/Asia/SoutheastAsia.png" alt="SoutheastAsia" class="dragTiles ui-draggable ui-draggable-handle" style="left: 903.375030517578px; top: 353.000022888184px;">
+		</a>
+		<a id="Ural" class="highlightit">
+			<img src="images/territories/Asia/Ural.png" alt="Ural" class="dragTiles ui-draggable ui-draggable-handle" style="left: 778.375030517578px; top: 51.000002861023px;">
+		</a>
+		<a id="Yakutsk" class="highlightit">
+			<img src="images/territories/Asia/Yakutsk.png" alt="Yakutsk" class="dragTiles ui-draggable ui-draggable-handle" style="left: 902.375030517578px; top: 33.0000009536743px;">
+		</a>
+		<a id="CentralAfrica" class="highlightit">
+			<img src="images/territories/Africa/CentralAfrica.png" alt="CentralAfrica" class="dragTiles ui-draggable ui-draggable-handle" style="left: 596.375020027161px; top: 478.000015258789px;">
+		</a>
+		<a id="EastAfrica" class="highlightit">
+			<img src="images/territories/Africa/EastAfrica.png" alt="EastAfrica" class="dragTiles ui-draggable ui-draggable-handle" style="left: 649.375020027161px; top: 429.000015258789px;">
+		</a>
+		<a id="Egypt" class="highlightit">
+			<img src="images/territories/Africa/Egypt.png" alt="Egypt" class="dragTiles ui-draggable ui-draggable-handle" style="left: 597.361117362976px; top: 373.993075370789px;">
+		</a>
+		<a id="Madagascar" class="highlightit">
+			<img src="images/territories/Africa/Madagascar.png" alt="Madagascar" class="dragTiles ui-draggable ui-draggable-handle" style="left: 728.375px; top: 577.000030517578px;">
+		</a>
+		<a id="NorthAfrica" class="highlightit">
+			<img src="images/territories/Africa/NorthAfrica.png" alt="NorthAfrica" class="dragTiles ui-draggable ui-draggable-handle" style="left: 502.375020027161px; top: 352.000015258789px;">
+		</a>
+		<a id="SouthAfrica" class="highlightit">
+			<img src="images/territories/Africa/SouthAfrica.png" alt="SouthAfrica" class="dragTiles ui-draggable ui-draggable-handle" style="left: 608.375020027161px; top: 550.000015258789px;">
+		</a>	
+	</div>
+	<div id="menuWrapper">
+		<div class="menu">
+			<img id="logo" src="http://usaopoly.com/sites/default/files/brand_logo/risk_logo_cmyk.jpg"/>
+		</div>
+		<div id="fightStatus" class="menu">
+			
+		</div>
+		<div id="turnStatus" class="menu">
+			<div id="turn"></div>
+			<div id="color"></div>
+			<div id="phase"></div>
+		</div>
+	</div>
+	<div id="username">
+	</div>	
+	</body>
+</html>

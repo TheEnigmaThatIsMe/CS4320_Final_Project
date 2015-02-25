@@ -1,0 +1,32 @@
+This is an instruction of game function
+1.move_function is the function to move the armies,you can use database
+command to pass query to this function.we will use MVC.so you can put this
+code in the model,thus,I put this code in the commment.In this function,you
+need to check if the number of troops is more than 1 and if the two countries
+are adjacent.
+
+2.attack_function also needs the database command.so I also put the code in the
+query.In this function,you also need to check if the number of troops is more
+than 1 and determine the number of dices according to the number of
+troops.Then you can compare the maximum of two players' dices.If the
+attacker's number is bigger than the defender then the victor is
+attacker,otherwise is defender.you need to update your database after attack
+function.so I put the database command in the comment, you will use it in the
+model.you will also need to determine if the country is occupied according to
+the number of troops of defender.If the country is occupied,you also need to
+update the owner of country besides the number of armies.
+
+3.drawcard_function needs the free cards' ID and the number of cards the player
+owned.you can get this from database so you can put the code in model.I have
+put the code you need in model in the comment.you can get a card which has no
+owner and then updata the riskcards table and player table.If your own card
+now is equal or more than 7.you need to trade your card use trade function.
+
+4.tradecard_function needs the details of the card you own.you can calculate
+the type of cards you own.if the number of the same kind of cards is equal or
+more than 3,then you need to update the table of riskcards to set this cards'
+owner_id to 0,otherwise,you need to hint the player he cannot trade cards.
+
+PS:we will use javascript later to give the samll window to let them choose if
+they will continue attack or not.How many troops they will move.and hint them
+if they can trade cards or not.
